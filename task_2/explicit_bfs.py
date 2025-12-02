@@ -1,6 +1,6 @@
 from collections import deque
 
-class PetriNet:
+class BFS:
     def __init__(self, places, transitions, arcs):
         self.place_ids = list(places.keys())
         self.initial_marking = tuple(places[p] for p in self.place_ids)
