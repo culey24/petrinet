@@ -1,4 +1,3 @@
-import time
 from dd.bdd import BDD
 
 class SymbolicPetriNet:

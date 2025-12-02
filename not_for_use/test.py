@@ -1,5 +1,5 @@
 import os
-from tests_not_for_use.petri_net import PetriNet
+from not_for_use.petri_net import PetriNet
 
 for f in os.listdir("samples"):
     if f.endswith(".pnml"):
