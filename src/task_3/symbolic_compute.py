@@ -1,141 +1,136 @@
 from dd.bdd import BDD
+import time
 
-class SymbolicPetriNet:
-    def __init__(self, places, transitions, arcs):
-        self.b = BDD()
+def symbolic_reachability(places, transitions):
+    """
+    Computes the set of reachable markings using Binary Decision Diagrams (BDD).
+    
+    CORRECTION: Uses bdd.apply() instead of operators &, |, ~ because 
+    'dd.bdd' returns integers, and Python bitwise operators corrupt the BDD node IDs.
+    """
+    print("\n[Symbolic BDD] Starting BDD construction...")
+    start_time = time.time()
+    
+    # 1. Initialize BDD Manager
+    bdd = BDD()
+    
+    # --- HELPER FUNCTIONS FOR SAFTEY ---
+    # Wraps bdd.apply to avoid using &, |, ~ on integers
+    def AND(u, v): return bdd.apply('and', u, v)
+    def OR(u, v):  return bdd.apply('or', u, v)
+    def NOT(u):    return bdd.apply('not', u)
+    def DIFF(u, v): return bdd.apply('diff', u, v)
+    # -----------------------------------
 
-        # consistent place ordering
-        self.places = sorted(list(places.keys()))
-        self.num_places = len(self.places)
-        self.place_ids = self.places
-        self.transitions = list(transitions)
-
-        # variable names
-        self.var_names = [f'x{i}' for i in range(self.num_places)]
-        self.var_names_p = [f'xp{i}' for i in range(self.num_places)]
-
-        # declare variables in the manager
-        self.b.declare(*(self.var_names + self.var_names_p))
-
-        # variables as nodes (manager.var returns a BDD node id)
-        self.vars_x = [self.b.var(name) for name in self.var_names]
-        self.vars_xp = [self.b.var(name) for name in self.var_names_p]
-
-        self.p_map = {pid: i for i, pid in enumerate(self.places)}
-
-        # initial marking BDD
-        self.init_bdd = self.b.true
-        for pid, tokens in places.items():
-            idx = self.p_map[pid]
-            if tokens == 1:
-                self.init_bdd = self.b.apply('and', self.init_bdd, self.vars_x[idx])
+    num_places = len(places)
+    
+    # 2. Variable Declaration (Interleaved for Optimization)
+    var_order = []
+    for i in range(num_places):
+        var_order.append(f"x{i}") # Current state
+        var_order.append(f"y{i}") # Next state
+    
+    bdd.declare(*var_order)
+    
+    # x[i] and y[i] are integers representing BDD nodes
+    x = [bdd.var(f"x{i}") for i in range(num_places)]
+    y = [bdd.var(f"y{i}") for i in range(num_places)]
+    
+    # 3. Construct Initial Marking I(x)
+    print("  [BDD] Encoding Initial Marking...")
+    init_bdd = bdd.true
+    
+    # places is a dict {id: tokens}, sorted keys match indices 0..N-1
+    sorted_pids = sorted(places.keys())
+    
+    for i, pid in enumerate(sorted_pids):
+        if places[pid] == 1:
+            init_bdd = AND(init_bdd, x[i])
+        else:
+            init_bdd = AND(init_bdd, NOT(x[i]))
+            
+    # 4. Construct Transition Relation T(x, y)
+    print("  [BDD] Constructing Transition Relations...")
+    
+    Trans_Rel = bdd.false
+    
+    for t in transitions:
+        t_rel = bdd.true
+        
+        # A. Pre-conditions (Guard): 
+        for p_idx in t["pre"]:
+            t_rel = AND(t_rel, x[p_idx])
+            
+        # B. Post-conditions & Action:
+        for i in range(num_places):
+            if i in t["pre"] and i not in t["post"]:
+                # Consumed: Next state is 0 (NOT y[i])
+                t_rel = AND(t_rel, NOT(y[i]))
+            elif i in t["post"]:
+                # Produced: Next state is 1 (y[i])
+                t_rel = AND(t_rel, y[i])
             else:
-                neg = self.b.apply('not', self.vars_x[idx])
-                self.init_bdd = self.b.apply('and', self.init_bdd, neg)
+                # Frame Condition: Unchanged (y[i] <-> x[i])
+                # Logic: (x AND y) OR ((NOT x) AND (NOT y))
+                term1 = AND(x[i], y[i])
+                term2 = AND(NOT(x[i]), NOT(y[i]))
+                frame = OR(term1, term2)
+                t_rel = AND(t_rel, frame)
+        
+        # Add this transition to the global relation
+        Trans_Rel = OR(Trans_Rel, t_rel)
 
-        # build pre/post
-        self.pre = {t: set() for t in self.transitions}
-        self.post = {t: set() for t in self.transitions}
-        for s, t in arcs:
-            if t in self.transitions:
-                self.pre[t].add(s)
-            elif s in self.transitions:
-                self.post[s].add(t)
-    def _count_bdd(self, node):
-        """
-        Count number of satisfying assignments using dd 0.6.0.
-        """
-        try:
-            c = self.b.count(node, self.num_places)
-            return int(round(c))
-        except Exception as e:
-            raise RuntimeError(f"BDD count failed: {e}")
+    # 5. Fixed Point Iteration
+    print("  [BDD] Starting Fixed-Point Iteration...")
+    
+    R = init_bdd
+    iterations = 0
+    
+    # Renaming map: y_i -> x_i
+    rename_map = {f"y{i}": f"x{i}" for i in range(num_places)}
+    # Variables to existentially quantify
+    x_vars = set(f"x{i}" for i in range(num_places))
+    
+    print("  Iter | BDD Nodes | Reachable States")
+    print("  -----+-----------+-----------------")
+    
+    while True:
+        iterations += 1
+        
+        # --- Symbolic Image Computation ---
+        # 1. Conjunction: Valid moves (R AND T)
+        next_state_y = AND(R, Trans_Rel)
+        
+        # 2. Existential Quantification: Abstract away x
+        next_state_y = bdd.exist(x_vars, next_state_y)
+        
+        # 3. Renaming: y -> x
+        next_state_x = bdd.let(rename_map, next_state_y)
+        
+        # --- Convergence Check ---
+        # New = Next - R
+        new_states = DIFF(next_state_x, R)
+        
+        if new_states == bdd.false:
+            print(f"  Conv | Converged in {iterations} iterations.")
+            break
+            
+        # R = R OR New
+        R = OR(R, new_states)
+        
+        # Metrics
+        count = bdd.count(R, nvars=num_places)
+        print(f"  {iterations:4d} | {len(bdd):9d} | {count}")
 
-    def build_transition_relation(self):
-        R_total = self.b.false
-        for t in self.transitions:
-            cond_enabled = self.b.true
-            involved = self.pre[t].union(self.post[t])
-
-            # enabled: all pre places must be 1
-            for p in self.pre[t]:
-                idx = self.p_map[p]
-                cond_enabled = self.b.apply('and', cond_enabled, self.vars_x[idx])
-
-            # action on next-state vars
-            action = self.b.true
-            for p in self.pre[t]:
-                idx = self.p_map[p]
-                if p not in self.post[t]:
-                    neg_xp = self.b.apply('not', self.vars_xp[idx])
-                    action = self.b.apply('and', action, neg_xp)
-            for p in self.post[t]:
-                idx = self.p_map[p]
-                if p not in self.pre[t]:
-                    action = self.b.apply('and', action, self.vars_xp[idx])
-
-            # frame: unaffected places x_i == x_i'
-            frame = self.b.true
-            for pid in self.place_ids:
-                if pid not in involved:
-                    idx = self.p_map[pid]
-                    xor_expr = self.b.apply('xor', self.vars_x[idx], self.vars_xp[idx])
-                    xnor = self.b.apply('not', xor_expr)
-                    frame = self.b.apply('and', frame, xnor)
-
-            R_t = self.b.apply('and', cond_enabled, self.b.apply('and', action, frame))
-            R_total = self.b.apply('or', R_total, R_t)
-
-        return R_total
-
-    def build_bdd_from_markings(self, markings):
-        """Construct a BDD (over x0,x1,..) that is true exactly on the given markings (iterable of tuples)."""
-        S = self.b.false
-        for m in markings:
-            term = self.b.true
-            for i, bit in enumerate(m):
-                if bit == 1:
-                    term = self.b.apply('and', term, self.vars_x[i])
-                else:
-                    term = self.b.apply('and', term, self.b.apply('not', self.vars_x[i]))
-            S = self.b.apply('or', S, term)
-        return S
-
-    def compute_reachable(self, fallback_markings=None):
-        """
-        Try symbolic fixed-point using manager.exist if available.
-        If that API isn't present or is difficult, you can supply
-        fallback_markings (list of tuples) and we'll build the BDD directly.
-        """
-        # Fast path: if caller provided explicit markings (from your BFS), build BDD from them
-        if fallback_markings is not None:
-            S = self.build_bdd_from_markings(fallback_markings)
-            count = self._count_bdd(S)
-
-            return S, int(round(count)), 0.0
-
-        # Otherwise try the symbolic fixed point (best-effort; depends on dd version)
-        R = self.build_transition_relation()
-        S = self.init_bdd
-
-        # attempt to call manager.exist if available
-        try:
-            # quant vars by name
-            qvars = set(self.var_names)
-            while True:
-                SR = self.b.apply('and', S, R)
-                # use manager's exist if present: signature may be (vars, node)
-                img_xp = self.b.exist(qvars, SR)
-                # rename x' -> x using manager.let; map xp names to x names
-                rename_map = {self.var_names_p[i]: self.var_names[i] for i in range(self.num_places)}
-                img_x = self.b.let(rename_map, img_xp)
-                S_new = self.b.apply('or', S, img_x)
-                if S_new == S:
-                    break
-                S = S_new
-            count = self._count_bdd(S)
-
-            return S, int(round(count)), 0.0
-        except Exception as e:
-            raise RuntimeError("Symbolic iteration failed; please either use a dd version with 'exist' or pass explicit reachable "
-                                "markings (fallback_markings) computed by BFS. Original error: " + str(e))
+    end_time = time.time()
+    final_count = bdd.count(R, nvars=num_places)
+    
+    print(f"[Symbolic BDD] Done. Total Reachable: {final_count}")
+    
+    return {
+        "bdd_obj": R,
+        "bdd_manager": bdd, 
+        "count": final_count,
+        "nodes": len(bdd),
+        "time": end_time - start_time
+    }

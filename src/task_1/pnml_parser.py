@@ -3,30 +3,49 @@ import xml.etree.ElementTree as ET
 class PNMLParser:
     def __init__(self, file_path):
         self.file_path = file_path
-        self.places = {}
+        self.places = {} 
         self.transitions = set()
         self.arcs = []
 
     def parse(self):
-        tree = ET.parse(self.file_path)
-        root = tree.getroot()
+        try:
+            tree = ET.parse(self.file_path)
+            root = tree.getroot()
+        except FileNotFoundError:
+            print(f"Error: File '{self.file_path}' not found.")
+            return self
 
-        net = root.find(".//net")
+        # --- FIX: Strip Namespaces ---
+        # The PNML file uses a namespace (xmlns="..."). 
+        # We strip it from every tag to make searching easy.
+        for elem in root.iter():
+            if '}' in elem.tag:
+                elem.tag = elem.tag.split('}', 1)[1]
+        # -----------------------------
+
+        net = root.find("net")
+        if net is None:
+            print("Error: Could not find <net> element. Check XML structure.")
+            return self
 
         # ---- Places ----
-        for place in net.findall("place"):
+        for place in net.findall(".//place"):
             pid = place.attrib["id"]
-            marking_el = place.find("./initialMarking/text")
-            marking = int(marking_el.text) if marking_el is not None else 0
+            # Handle potential missing initialMarking
+            marking_el = place.find(".//initialMarking/text") 
+            if marking_el is not None and marking_el.text:
+                marking = int(marking_el.text)
+            else:
+                marking = 0
             self.places[pid] = marking
 
         # ---- Transitions ----
-        for transition in net.findall("transition"):
+        for transition in net.findall(".//transition"):
             tid = transition.attrib["id"]
             self.transitions.add(tid)
 
         # ---- Arcs ----
-        for arc in net.findall("arc"):
+        for arc in net.findall(".//arc"):
             source = arc.attrib["source"]
             target = arc.attrib["target"]
             self.arcs.append((source, target))
@@ -35,6 +54,9 @@ class PNMLParser:
 
     def validate(self):
         errors = []
+        if not self.places and not self.transitions:
+            errors.append("Net is empty (Parsing failed or empty file).")
+            return errors
 
         # Check sources/targets exist
         for s, t in self.arcs:
