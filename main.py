@@ -1,6 +1,7 @@
 import sys
 import random
 import traceback
+import time
 from src.task_1.pnml_parser import PNMLParser
 from src.task_2.explicit_bfs import PetriNetBitmask
 from src.task_3.symbolic_compute import symbolic_reachability
@@ -31,9 +32,11 @@ else:
 
 if parser.places:
     print("\n=== TASK 2: Reachability (Bitmask BFS) ===")
+    start_time = time.time()
     pn_bit = PetriNetBitmask(parser.places, parser.transitions, parser.arcs)
     reachable_masks = pn_bit.reachable_markings_bfs()
-    
+    end_time = time.time()
+    print(f"Time taken (BFS): {end_time - start_time:.6f} seconds")
     print("Initial mask (int):", pn_bit.initial_mask)
     print("Number of reachable markings:", len(reachable_masks))
 
