@@ -67,11 +67,9 @@ Deadlock found: {'p2': 1, 'p1': 0, 'p3': 0}
 [Success] Found Optimal Marking on attempt 1!
 OPTIMAL MARKING FOUND with Score: 6.0
 ```
-## Further discussion
-
 ## Contribution
 Quach Gia Bao \
 Diec Tuan Chi \
 To Quoc Tai \
 Ly Trieu Phong \
-Vu Quan
+Vu Minh Quan
