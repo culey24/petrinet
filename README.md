@@ -40,7 +40,38 @@ To run with a specific `.pnml` file:
 python main.py samples/your_file.pnml
 ```
 ## Example
+Running ```python main.py samples/net10.pnml``` will yield results similar to:
+```
+Reading file: samples/net10.pnml
 
+=== TASK 1: Parsed PNML ===
+Places (3): ['p1', 'p2', 'p3'] ...
+
+=== TASK 2: Reachability (Bitmask BFS) ===
+Time taken (BFS): 0.000200 seconds
+Number of reachable markings: 3
+
+=== TASK 3: Symbolic Reachability ===
+[Symbolic BDD] Starting BDD construction...
+...
+[Symbolic BDD] Done. Total Reachable: 3
+>> Verification Passed: Symbolic count matches BFS count.
+
+=== TASK 4: Deadlock Detection ===
+[ILP] Model built...
+[Success] Found Deadlock on attempt 1!
+Deadlock found: {'p2': 1, 'p1': 0, 'p3': 0}
+
+=== TASK 5: Optimization ===
+[Task 5] Starting Optimization (Target: Maximize Weighted Sum)...
+[Success] Found Optimal Marking on attempt 1!
+OPTIMAL MARKING FOUND with Score: 6.0
+```
 ## Further discussion
 
 ## Contribution
+Quach Gia Bao \
+Diec Tuan Chi \
+To Quoc Tai \
+Ly Trieu Phong \
+Vu Quan

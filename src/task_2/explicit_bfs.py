@@ -2,15 +2,12 @@ from collections import deque
 
 class PetriNet:
     def __init__(self, places, transitions, arcs):
-        # 1. Ensure deterministic order
         self.place_ids = sorted(list(places.keys()))
         
-        # 2. FIX: Create an O(1) lookup map for indices
         self.p_indices = {pid: i for i, pid in enumerate(self.place_ids)} 
         
         self.initial_marking = tuple(places[p] for p in self.place_ids)
 
-        # build pre/post incidence
         self.pre = {t: set() for t in transitions}
         self.post = {t: set() for t in transitions}
 
@@ -20,30 +17,23 @@ class PetriNet:
             elif s in transitions and t in places:
                 self.post[s].add(t)
 
-    # This fire method is strictly for 1-safe nets (Boolean)
     def fire(self, marking, transition):
         new_m = list(marking)
 
-        # Check enabled
         for p in self.pre[transition]:
-            # FIX: Use O(1) dictionary lookup
             idx = self.p_indices[p] 
             if new_m[idx] == 0:
-                return None  # not enabled
+                return None 
 
-        # consume tokens
         for p in self.pre[transition]:
-            # FIX: Use O(1) dictionary lookup
             idx = self.p_indices[p]
-            new_m[idx] = 0 # consumes token
+            new_m[idx] = 0 
 
-        # produce tokens
         for p in self.post[transition]:
-            # FIX: Use O(1) dictionary lookup
             idx = self.p_indices[p]
             if new_m[idx] == 1:
-                return None  # 1-safe violation
-            new_m[idx] = 1 # produces token
+                return None 
+            new_m[idx] = 1 
 
         return tuple(new_m)
         
@@ -54,7 +44,6 @@ class PetriNet:
 
         while queue:
             m = queue.popleft()
-            # Iterate through transitions, check if firing is possible/valid
             for t in self.pre:
                 new_m = self.fire(m, t)
                 if new_m is not None and new_m not in visited:
@@ -76,16 +65,13 @@ class PetriNetBitmask:
         self.p_indices = {pid: i for i, pid in enumerate(self.place_ids)}
         self.num_places = len(self.place_ids)
 
-        # initial marking as int bitmask
         im = 0
         for pid, tokens in places.items():
             if tokens and tokens > 0:
                 im |= (1 << self.p_indices[pid])
         self.initial_mask = im
 
-        # prepare transition masks
         self.transitions = sorted(list(transitions))
-        # pre_mask[t] and post_mask[t] stored by transition id
         self.pre_mask = {}
         self.post_mask = {}
         for t in self.transitions:
@@ -111,16 +97,13 @@ class PetriNetBitmask:
         pre = self.pre_mask[transition]
         post = self.post_mask[transition]
 
-        # enabled?
         if (marking_mask & pre) != pre:
             return None
 
-        # producing into already-full, but only for post-only places:
         post_only = post & (~pre)
         if (marking_mask & post_only) != 0:
             return None  # would violate 1-safe
 
-        # compute next
         next_mask = (marking_mask & (~pre)) | post
         return next_mask
 
@@ -143,14 +126,9 @@ class PetriNetBitmask:
                         return visited
         return visited
 
-    # helper to pretty-print a mask as tuple like before (0/1 tuple)
     def mask_to_tuple(self, mask):
         return tuple(1 if (mask >> i) & 1 else 0 for i in range(self.num_places))
 
-
-# -----------------------------
-# Small helper to build BDD from int-markings (only used as fallback / optional)
-# -----------------------------
 def build_bdd_from_int_markings(bdd_obj, vars_x, markings_int):
     """
     bdd_obj: dd.BDD instance

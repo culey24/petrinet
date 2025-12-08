@@ -11,20 +11,15 @@ def symbolic_reachability(places, transitions):
     print("\n[Symbolic BDD] Starting BDD construction...")
     start_time = time.time()
     
-    # 1. Initialize BDD Manager
     bdd = BDD()
     
-    # --- HELPER FUNCTIONS FOR SAFTEY ---
-    # Wraps bdd.apply to avoid using &, |, ~ on integers
     def AND(u, v): return bdd.apply('and', u, v)
     def OR(u, v):  return bdd.apply('or', u, v)
     def NOT(u):    return bdd.apply('not', u)
     def DIFF(u, v): return bdd.apply('diff', u, v)
-    # -----------------------------------
 
     num_places = len(places)
     
-    # 2. Variable Declaration (Interleaved for Optimization)
     var_order = []
     for i in range(num_places):
         var_order.append(f"x{i}") # Current state
@@ -32,15 +27,12 @@ def symbolic_reachability(places, transitions):
     
     bdd.declare(*var_order)
     
-    # x[i] and y[i] are integers representing BDD nodes
     x = [bdd.var(f"x{i}") for i in range(num_places)]
     y = [bdd.var(f"y{i}") for i in range(num_places)]
     
-    # 3. Construct Initial Marking I(x)
     print("  [BDD] Encoding Initial Marking...")
     init_bdd = bdd.true
     
-    # places is a dict {id: tokens}, sorted keys match indices 0..N-1
     sorted_pids = sorted(places.keys())
     
     for i, pid in enumerate(sorted_pids):
@@ -49,7 +41,6 @@ def symbolic_reachability(places, transitions):
         else:
             init_bdd = AND(init_bdd, NOT(x[i]))
             
-    # 4. Construct Transition Relation T(x, y)
     print("  [BDD] Constructing Transition Relations...")
     
     Trans_Rel = bdd.false
@@ -57,11 +48,9 @@ def symbolic_reachability(places, transitions):
     for t in transitions:
         t_rel = bdd.true
         
-        # A. Pre-conditions (Guard): 
         for p_idx in t["pre"]:
             t_rel = AND(t_rel, x[p_idx])
             
-        # B. Post-conditions & Action:
         for i in range(num_places):
             if i in t["pre"] and i not in t["post"]:
                 # Consumed: Next state is 0 (NOT y[i])
@@ -80,7 +69,6 @@ def symbolic_reachability(places, transitions):
         # Add this transition to the global relation
         Trans_Rel = OR(Trans_Rel, t_rel)
 
-    # 5. Fixed Point Iteration
     print("  [BDD] Starting Fixed-Point Iteration...")
     
     R = init_bdd
