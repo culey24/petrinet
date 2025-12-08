@@ -30,13 +30,20 @@ pip install -r requirements.txt
 ```
 *(Note: `dd` requires a C compiler. If installation fails, try `pip install dd --no-binary dd` or use a pre-compiled binary).*
 
+## Generate Test Cases
+To generate testcase with medium size and large size we run these commands:
+```sh
+python gen_medium.py # medium scale
+python gen_large.py # large scale
+```
+
 ## Execution
 To run the program with the default sample file:
 ```sh
 python main.py
 ```
 To run with a specific `.pnml` file:
-```
+```sh
 python main.py samples/your_file.pnml
 ```
 ## Example

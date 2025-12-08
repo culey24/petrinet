@@ -35,4 +35,4 @@ def generate_pnml(filename, num_places=20, num_trans=15):
     print(f"Generated {filename}")
 
 if __name__ == "__main__":
-    generate_pnml("samples/gen.pnml")
+    generate_pnml("samples/medium.pnml")
